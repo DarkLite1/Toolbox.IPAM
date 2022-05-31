@@ -43,15 +43,16 @@ Function Import-CredentialsHC {
         Create a PSCredential object.
 
     .DESCRIPTION
-        Create a PSCredential object with a user name and password that can be used for authentication 
-        via 'CredSsp'.
+        Create a PSCredential object with a user name and password that can be 
+        used for authentication via 'CredSsp'.
 
     .PARAMETER SamAccountName 
         The SAM Account Name used to logon to the domain.
 
     .PARAMETER Password
-        Plain text or a hashed file. Keep in mind that the hashed file can only be decrypted by the 
-        user that hashed it. A part of the Windows profile is used to decipher the hash.
+        Plain text or a hashed file. Keep in mind that the hashed file can only 
+        be decrypted by the user that hashed it. A part of the Windows profile 
+        is used to decipher the hash.
         
     .EXAMPLE
         $Cred = Import-CredentialsHC -SamAccountName 'bob' -Password '123'
