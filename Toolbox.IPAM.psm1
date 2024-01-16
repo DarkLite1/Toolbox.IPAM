@@ -38,22 +38,22 @@ Function ConvertTo-HashTableHC {
     }
 }
 Function Import-CredentialsHC {
-    <# 
-    .SYNOPSIS   
+    <#
+    .SYNOPSIS
         Create a PSCredential object.
 
     .DESCRIPTION
-        Create a PSCredential object with a user name and password that can be 
+        Create a PSCredential object with a user name and password that can be
         used for authentication via 'CredSsp'.
 
-    .PARAMETER SamAccountName 
+    .PARAMETER SamAccountName
         The SAM Account Name used to logon to the domain.
 
     .PARAMETER Password
-        Plain text or a hashed file. Keep in mind that the hashed file can only 
-        be decrypted by the user that hashed it. A part of the Windows profile 
+        Plain text or a hashed file. Keep in mind that the hashed file can only
+        be decrypted by the user that hashed it. A part of the Windows profile
         is used to decipher the hash.
-        
+
     .EXAMPLE
         $Cred = Import-CredentialsHC -SamAccountName 'bob' -Password '123'
         Creates the PSCredential object '$Cred' for the user 'bob' with his
@@ -61,7 +61,7 @@ Function Import-CredentialsHC {
 
     .EXAMPLE
         $Cred = Import-CredentialsHC 'bob' 'T:\Input\bob.txt'
-        Creates the PSCredential object '$Cred' for the user 'bob' with his 
+        Creates the PSCredential object '$Cred' for the user 'bob' with his
         password in the hashed file "T:\Input\bob.txt".
     #>
 
@@ -71,7 +71,7 @@ Function Import-CredentialsHC {
         [ValidateNotNullOrEmpty()]
         [String]$SamAccountName,
         [parameter(Mandatory, Position = 1)]
-        [ValidateNotNullOrEmpty()] 
+        [ValidateNotNullOrEmpty()]
         [String]$Password
     )
 
@@ -92,9 +92,9 @@ Function Import-CredentialsHC {
             try {
                 $Pwd = Get-Content $Password | ConvertTo-SecureString -Force -EA Stop
                 $Credentials = New-Object System.Management.Automation.PSCredential -ArgumentList $SamAccountName, $Pwd
-            }            
+            }
             catch {
-                throw "Import-CredentialsHC: The password has been hashed with another Windows profile (user) then the Windows account now in use 
+                throw "Import-CredentialsHC: The password has been hashed with another Windows profile (user) then the Windows account now in use
                 (all 3 users/owners need to be the same)
                 - Script account :`t $env:USERNAME
                 - SamAccountName :`t $SamAccountName
@@ -103,14 +103,14 @@ Function Import-CredentialsHC {
         }
         else {
             $Pwd = $Password | ConvertTo-SecureString -AsPlainText -Force
-            $Credentials = New-Object System.Management.Automation.PSCredential -ArgumentList $SamAccountName, $Pwd 
+            $Credentials = New-Object System.Management.Automation.PSCredential -ArgumentList $SamAccountName, $Pwd
         }
 
         if (
             (New-Object directoryservices.directoryentry "", $SamAccountName, $($Credentials.GetNetworkCredential().Password)).psbase.name -ne $null
         ) {
             Write-Output $Credentials
-        } 
+        }
         else {
             throw "Import-CredentialsHC: The password for the user '$SamAccountName' is not valid"
         }
@@ -172,28 +172,6 @@ $DefaultProperties = @{
 $Script:IpamAccessDetails = $null
 
 #region Helper functions
-Function Skip-SelfSignedCertsHC {
-    try {
-        if ( ( [System.Net.ServicePointManager]::CertificatePolicy ).ToString() -ne 'TrustAllCertsPolicy') {
-            Write-Verbose 'Adding TrustAllCertsPolicy type'
-            Add-Type -TypeDefinition @"
-        using System.Net;
-        using System.Security.Cryptography.X509Certificates;
-        public class TrustAllCertsPolicy : ICertificatePolicy {
-            public bool CheckValidationResult( ServicePoint srvPoint, X509Certificate certificate, WebRequest request, int certificateProblem) {
-            return true;
-    }
-}
-"@
-            [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
-            Write-Verbose 'TrustAllCertsPolicy type added'
-        }
-    }
-    catch {
-        throw "Failed skipping the self signed certificates: $_"
-    }
-
-}
 
 Function Get-ErrorFromRestHC {
     Param (
@@ -233,10 +211,11 @@ Function Get-IpamAccessCookieHC {
         Write-Verbose 'Request authentication cookie'
 
         $Params = @{
-            Uri             = "$Uri/record:host?_return_as_object=1"
-            Method          = 'GET'
-            Credential      = $Credential
-            SessionVariable = 'AuthCookie'
+            Uri                  = "$Uri/record:host?_return_as_object=1"
+            Method               = 'GET'
+            Credential           = $Credential
+            SessionVariable      = 'AuthCookie'
+            SkipCertificateCheck = $true
         }
         $null = Invoke-RestMethod @Params
 
@@ -263,10 +242,11 @@ Function Get-IpamSecuritySettingHC {
 
     Try {
         $Params = @{
-            Method      = 'GET'
-            ContentType = 'application/json'
-            Credential  = $Credential
-            Uri         = "$Uri/grid/b25lLmNsdXN0ZXIkMA:Infoblox?_return_as_object=1&_return_fields%2B=security_setting"
+            Method               = 'GET'
+            ContentType          = 'application/json'
+            SkipCertificateCheck = $true
+            Credential           = $Credential
+            Uri                  = "$Uri/grid/b25lLmNsdXN0ZXIkMA:Infoblox?_return_as_object=1&_return_fields%2B=security_setting"
         }
         (Invoke-RestMethod @Params).result.security_setting
     }
@@ -365,8 +345,8 @@ Function New-IpamObjectHC {
 
         By default the required IPAM services are restarted after applying
         changes to the system. This is a requirement for IPAM. In case more
-        speed is required, this can be skipped during the function call but 
-        should then be run at the end of your script to restart the needed 
+        speed is required, this can be skipped during the function call but
+        should then be run at the end of your script to restart the needed
         services all at once when all actions are done by invoking
         'Restart-IpamServiceHC'.
 
@@ -525,7 +505,7 @@ Function New-IpamObjectHC {
                 foreach ($K in @($B.Keys)) {
                     if ($null -eq $B[$K]) {
                         $B[$K] = ''
-                    } 
+                    }
                 }
                 #endregion
             }
@@ -536,11 +516,12 @@ Function New-IpamObjectHC {
             Try {
                 #region Add new IPAM object
                 $Params = @{
-                    Uri  = "$Uri/$Type`?_return_fields%2B=$ReturnFieldString&_return_as_object=1"
+                    Uri                  = "$Uri/$Type`?_return_fields%2B=$ReturnFieldString&_return_as_object=1"
                     # Body = @(
                     #     $B
                     # ) | ConvertTo-Json
-                    Body = [System.Text.Encoding]::UTF8.GetBytes((@(
+                    SkipCertificateCheck = $true
+                    Body                 = [System.Text.Encoding]::UTF8.GetBytes((@(
                                 $B
                             ) | ConvertTo-Json))
                 }
@@ -734,8 +715,9 @@ Function Get-IpamObjectHC {
 
             #region Get parameters
             $GetParams = @{
-                Method     = 'GET'
-                WebSession = $WebSession
+                Method               = 'GET'
+                WebSession           = $WebSession
+                SkipCertificateCheck = $true
             }
             #endregion
 
@@ -893,8 +875,8 @@ Function Update-IpamObjectHC {
         The properties returned by the API.
 
     .PARAMETER NoServiceRestart
-        Omitting this switch will restart the required IPAM services. This will 
-        ake some time so if multiple actions are required it's best to user 
+        Omitting this switch will restart the required IPAM services. This will
+        ake some time so if multiple actions are required it's best to user
         this switch on the New and Updated
         functions and run the command 'Restart-IpamServiceHC' after all actions are done. It
         will speed up things.
@@ -1053,10 +1035,11 @@ Function Update-IpamObjectHC {
             Try {
                 #region Update object
                 $Params = @{
-                    Uri  = "$U&_return_as_object=1"
-                    Body = @(
+                    Uri                  = "$U&_return_as_object=1"
+                    Body                 = @(
                         $Body
                     ) | ConvertTo-Json
+                    SkipCertificateCheck = $true
                 }
                 Invoke-RestMethod @PutParams @Params
                 #endregion
@@ -1086,19 +1069,19 @@ Function Remove-IpamObjectHC {
         Remove an object from IPAM.
 
     .DESCRIPTION
-        Remove an object from IPAM. When the object is no longer needed it can 
+        Remove an object from IPAM. When the object is no longer needed it can
         be removed by using its ReferenceObject string.
 
     .PARAMETER ReferenceObject
-        The ReferenceObject is an IPAM object ID that  is unique for each IPAM 
-        object. To find the correct ReferenceObject string the function 
+        The ReferenceObject is an IPAM object ID that  is unique for each IPAM
+        object. To find the correct ReferenceObject string the function
         et-IpamObjectHC can be used.
 
     .PARAMETER Environment
         The IPAM system that needs to be addressed.
 
-        All available systems are defined in the hashtable '$Credentials' at 
-        the top of this module file. These credentials can be updated when 
+        All available systems are defined in the hashtable '$Credentials' at
+        the top of this module file. These credentials can be updated when
         required and will be reflected throughout all functions in the module.
         Ex. Test, Prod, ...
 
@@ -1178,7 +1161,8 @@ Function Remove-IpamObjectHC {
             Try {
                 #region Remove IPAM object
                 $Params = @{
-                    Uri = "$Uri/$($R)"
+                    Uri                  = "$Uri/$($R)"
+                    SkipCertificateCheck = $true
                 }
                 Invoke-RestMethod @RemoveParams @Params
                 #endregion
@@ -1206,14 +1190,14 @@ Function Restart-IpamServiceHC {
         Restart the IPAM services.
 
     .DESCRIPTION
-        In case changes have been requested through the API or the GUI within 
-        IPAM, for example adding a new fixed address, it can be required to 
+        In case changes have been requested through the API or the GUI within
+        IPAM, for example adding a new fixed address, it can be required to
         restart the IPAM DNS or DHCP service.
 
-        By default, this function only restarts the services that are required 
-        or requested to be restarted. In case the function is called and no 
-        restart is required in IPAM, nothing will happen. In case a forced 
-        restart of a service is required, the switch '-Force' needs to be 
+        By default, this function only restarts the services that are required
+        or requested to be restarted. In case the function is called and no
+        restart is required in IPAM, nothing will happen. In case a forced
+        restart of a service is required, the switch '-Force' needs to be
         provided.
 
     .PARAMETER Name
@@ -1223,14 +1207,14 @@ Function Restart-IpamServiceHC {
         - ALL  : Both of the above
 
     .PARAMETER Force
-        When the switch '-Force' is used the specified service is forced to 
+        When the switch '-Force' is used the specified service is forced to
         restart, even if it's not required by IPAM.
 
     .PARAMETER Environment
         The IPAM system that needs to be addressed.
 
-        All available systems are defined in the hashtable '$Credentials' at 
-        the top of this module file. These credentials can be updated when 
+        All available systems are defined in the hashtable '$Credentials' at
+        the top of this module file. These credentials can be updated when
         required and will be reflected throughout all functions in the module.
         Ex. Test, Prod, ...
 
@@ -1293,8 +1277,9 @@ Function Restart-IpamServiceHC {
             if ($Force) { $Body.restart_option = 'FORCE_RESTART' }
 
             $Params = @{
-                Uri  = "$Uri/grid/b25lLmNsdXN0ZXIkMA:Infoblox?_function=restartservices"
-                Body = $Body | ConvertTo-Json
+                Uri                  = "$Uri/grid/b25lLmNsdXN0ZXIkMA:Infoblox?_function=restartservices"
+                Body                 = $Body | ConvertTo-Json
+                SkipCertificateCheck = $true
             }
 
             $null = Invoke-RestMethod @PostParams @Params
@@ -1327,17 +1312,17 @@ Function Get-IpamDhcpRangeHC {
         The properties returned by the API.
 
     .PARAMETER Filter
-        This filter will be evaluated by the API and cannot contain spaces. 
-        This means that the query will be faster, because the API filters for 
+        This filter will be evaluated by the API and cannot contain spaces.
+        This means that the query will be faster, because the API filters for
         us.
 
-        Multiple filters are allowed and will be evaluated separately. In case 
-        of multiple filters they are applied with the logical operator '-or'. 
-        When for example the following filter is used '-Filter A, B', results 
+        Multiple filters are allowed and will be evaluated separately. In case
+        of multiple filters they are applied with the logical operator '-or'.
+        When for example the following filter is used '-Filter A, B', results
         are returned in case condition A or condition B is met.
 
-        While searching for objects, you can filter the data using regular 
-        expressions. You would need to specify the ~ modifier to indicate you 
+        While searching for objects, you can filter the data using regular
+        expressions. You would need to specify the ~ modifier to indicate you
         are querying with a regular expression.
 
         - A search argument can use the following modifiers
@@ -1348,20 +1333,20 @@ Function Get-IpamDhcpRangeHC {
         < Less than or equal
         > Greater than or equal
 
-        - Only one of the following can be specified at a time: greater than, 
+        - Only one of the following can be specified at a time: greater than,
           less than, and
           regular expressions.
-        - Depending on the attribute type, following are modifiers supported by 
+        - Depending on the attribute type, following are modifiers supported by
           extensible attributes:
             ▪ integer and date support !, < and >.
             ▪ All other types behave like strings and support !, ~ and :.
-            • When you need to update or create multiple records, 
+            • When you need to update or create multiple records,
               you can store the data
 
     .EXAMPLE
         Get-IpamDhcpRangeHC -Environment Test
 
-        # Retrieve all ranges from the test environment with all their 
+        # Retrieve all ranges from the test environment with all their
         # properties.
 
         network_view : default
@@ -1447,27 +1432,27 @@ Function Get-IpamFixedAddressHC {
         Retrieve IPAM fixed address objects.
 
     .DESCRIPTION
-        Retrieve all IPAM fixed addresses, known in IPAM under the name 
+        Retrieve all IPAM fixed addresses, known in IPAM under the name
         FixedAddress.
 
-        By using the filter, only specific objects can be retrieved that match 
+        By using the filter, only specific objects can be retrieved that match
         the search criteria.
 
     .PARAMETER Property
         The properties returned by the API.
 
     .PARAMETER Filter
-        This filter will be evaluated by the API and cannot contain spaces. 
-        This means that the query will be faster, because the API filters for 
+        This filter will be evaluated by the API and cannot contain spaces.
+        This means that the query will be faster, because the API filters for
         us.
 
-        Multiple filters are allowed and will be evaluated separately. In case 
-        of multiple filters they are applied with the logical operator '-or'. 
-        When for example the following filter is used '-Filter A, B', results 
+        Multiple filters are allowed and will be evaluated separately. In case
+        of multiple filters they are applied with the logical operator '-or'.
+        When for example the following filter is used '-Filter A, B', results
         are returned in case condition A or condition B is met.
 
-        While searching for objects, you can filter the data using regular 
-        expressions. You would need to specify the ~ modifier to indicate you 
+        While searching for objects, you can filter the data using regular
+        expressions. You would need to specify the ~ modifier to indicate you
         are querying with a regular expression.
 
         - A search argument can use the following modifiers
@@ -1478,9 +1463,9 @@ Function Get-IpamFixedAddressHC {
         < Less than or equal
         > Greater than or equal
 
-        - Only one of the following can be specified at a time: greater than, 
+        - Only one of the following can be specified at a time: greater than,
         less than, and regular expressions.
-        - Depending on the attribute type, following are modifiers supported by 
+        - Depending on the attribute type, following are modifiers supported by
         extensible attributes:
             ▪ integer and date support !, < and >.
             ▪ All other types behave like strings and support !, ~ and :.
@@ -1489,10 +1474,10 @@ Function Get-IpamFixedAddressHC {
     .EXAMPLE
         Get-IpamFixedAddressHC -Environment Test
 
-        Retrieve all fixed addresses from the test environment with all their 
-        properties. This is the slowest search because the API needs to 
-        retrieve all properties for all fixed address objects. However,      
-        this will not have an impact on the IPAM server because of the use of 
+        Retrieve all fixed addresses from the test environment with all their
+        properties. This is the slowest search because the API needs to
+        retrieve all properties for all fixed address objects. However,
+        this will not have an impact on the IPAM server because of the use of
         'paging' in the background.
 
         mac                : 00:21:b7:9d:b0:71
@@ -1510,13 +1495,13 @@ Function Get-IpamFixedAddressHC {
         device_description :
         device_location    :
         always_update_dns  : False
-        comment            : 
+        comment            :
         _ref               : fixedaddress/ZG5zLmZpNC4wLi4:10.62.2.84/default
 
     .EXAMPLE
         Get-IpamFixedAddressHC -Environment Test -Filter 'mac=00:20:6b:e2:19:9f' -Property mac, name, ipv4addr
 
-        Retrieve the fixed address with mac address '00:20:6b:e2:19:9f' from 
+        Retrieve the fixed address with mac address '00:20:6b:e2:19:9f' from
         the test environment
 
         mac      : 00:20:6b:e2:19:9f
@@ -1528,8 +1513,8 @@ Function Get-IpamFixedAddressHC {
         $AllFixedAddresses = Get-IpamFixedAddressHC -Environment Test
         $AllFixedAddresses | Where-Object ({ $_.Name -eq 'PC1' })
 
-        Retrieve the fixed address with with name 'PC1'. To do this 
-        we first need to get all fixed addresses, because the property 'Name' 
+        Retrieve the fixed address with with name 'PC1'. To do this
+        we first need to get all fixed addresses, because the property 'Name'
         is not a searchable field according to the API
 
     .EXAMPLE
@@ -1623,17 +1608,17 @@ Function Get-IpamNetworkHC {
         The properties returned by the API.
 
     .PARAMETER Filter
-        This filter will be evaluated by the API and cannot contain spaces. 
-        This means that the query will be faster, because the API filters for 
+        This filter will be evaluated by the API and cannot contain spaces.
+        This means that the query will be faster, because the API filters for
         us.
 
-        Multiple filters are allowed and will be evaluated separately. In case 
-        of multiple filters they are applied with the logical operator '-or'. 
-        When for example the following filter is used '-Filter A, B', results 
+        Multiple filters are allowed and will be evaluated separately. In case
+        of multiple filters they are applied with the logical operator '-or'.
+        When for example the following filter is used '-Filter A, B', results
         are returned in case condition A or condition B is met.
 
-        While searching for objects, you can filter the data using regular 
-        expressions. You would need to specify the ~ modifier to indicate you 
+        While searching for objects, you can filter the data using regular
+        expressions. You would need to specify the ~ modifier to indicate you
         are querying with a regular expression.
 
         - A search argument can use the following modifiers
@@ -1644,9 +1629,9 @@ Function Get-IpamNetworkHC {
         < Less than or equal
         > Greater than or equal
 
-        - Only one of the following can be specified at a time: greater than, 
+        - Only one of the following can be specified at a time: greater than,
           less than, and regular expressions.
-        - Depending on the attribute type, following are modifiers supported by 
+        - Depending on the attribute type, following are modifiers supported by
           extensible attributes:
             ▪ integer and date support !, < and >.
             ▪ All other types behave like strings and support !, ~ and :.
@@ -1655,10 +1640,10 @@ Function Get-IpamNetworkHC {
     .EXAMPLE
         Get-IpamNetworkHC -Environment Test
 
-        Retrieve all subnets from the test environment with all their 
-        properties. This is the slowest search because the API needs to 
-        retrieve all properties for all network objects. However, this will not 
-        have an impact on the IPAM server because of the use of 'paging' in the 
+        Retrieve all subnets from the test environment with all their
+        properties. This is the slowest search because the API needs to
+        retrieve all properties for all network objects. However, this will not
+        have an impact on the IPAM server because of the use of 'paging' in the
         background.
 
     .EXAMPLE
@@ -1674,7 +1659,7 @@ Function Get-IpamNetworkHC {
     .EXAMPLE
         Get-IpamNetworkHC -Environment Test -Filter 'comment~:=London' -Property comment, network
 
-        Retrieve all networks that have the text 'London' in their comment 
+        Retrieve all networks that have the text 'London' in their comment
         field. The search is case insensitive.
 
     .EXAMPLE
@@ -1685,7 +1670,7 @@ Function Get-IpamNetworkHC {
         }
         Get-IpamNetworkHC @Params
 
-        Retrieve all networks with the network subnetmask '10.78.253.32/27' or 
+        Retrieve all networks with the network subnetmask '10.78.253.32/27' or
         '10.57.62.0/24'
 
     .LINK
@@ -1749,7 +1734,7 @@ Function New-IpamFixedAddressHC {
         Add a new fixed address object to IPAM.
 
     .DESCRIPTION
-        Add a new fixed address object to IPAM. This can be useful for address 
+        Add a new fixed address object to IPAM. This can be useful for address
         reservations
         based on mac address for example.
 
@@ -1757,14 +1742,14 @@ Function New-IpamFixedAddressHC {
         The properties returned by the API.
 
     .PARAMETER Body
-        A hashtable containing key value pairs that are used to created the new 
+        A hashtable containing key value pairs that are used to created the new
         fixed address.
 
     .PARAMETER NoServiceRestart
-        Omitting this switch will restart the required IPAM services. This will 
-        take some time so if multiple actions are required it's best to user 
-        this switch on the New and Updated functions and run the command 
-        'Restart-IpamServiceHC' after all actions are done. It will speed up 
+        Omitting this switch will restart the required IPAM services. This will
+        take some time so if multiple actions are required it's best to user
+        this switch on the New and Updated functions and run the command
+        'Restart-IpamServiceHC' after all actions are done. It will speed up
         things.
 
     .EXAMPLE
@@ -1773,9 +1758,9 @@ Function New-IpamFixedAddressHC {
             mac         = '03:03:33:33:33:36'
         }
 
-        Make an address reservation in IPAM for mac address 
-        '03:03:33:33:33:36'. When a machine is detected with this mac address 
-        on the network the fixed IP address '10.20.32.1'  will be assigned to 
+        Make an address reservation in IPAM for mac address
+        '03:03:33:33:33:36'. When a machine is detected with this mac address
+        on the network the fixed IP address '10.20.32.1'  will be assigned to
         it by the IPAM DHCP.
 
     .EXAMPLE
@@ -1787,12 +1772,12 @@ Function New-IpamFixedAddressHC {
             mac         = '03:03:33:33:33:36'
         }
 
-        Add the next free available IP address within the subnet of 'london' as 
+        Add the next free available IP address within the subnet of 'london' as
         a fixed address.
 
     .EXAMPLE
-        Make a reservation for mac address '03:03:33:33:33:36'. When the 
-        machine comes online it will receive the IP address '10.20.32.1' and 
+        Make a reservation for mac address '03:03:33:33:33:36'. When the
+        machine comes online it will receive the IP address '10.20.32.1' and
         the DNS name will match ths hostname to 'PC1'.
 
         New-IpamFixedAddressHC -Environment Test -Body @{
@@ -1870,14 +1855,14 @@ Function New-IpamNetworkHC {
         The properties returned by the API.
 
     .PARAMETER Body
-        A hashtable containing key value pairs that are used to created the new 
+        A hashtable containing key value pairs that are used to created the new
         fixed address.
 
     .PARAMETER NoServiceRestart
-        Omitting this switch will restart the required IPAM services. This will 
-        take some time so if multiple actions are required it's best to user 
-        this switch on the New and Updated functions and run the command 
-        'Restart-IpamServiceHC' after all actions are done. It will speed up 
+        Omitting this switch will restart the required IPAM services. This will
+        take some time so if multiple actions are required it's best to user
+        this switch on the New and Updated functions and run the command
+        'Restart-IpamServiceHC' after all actions are done. It will speed up
         things.
 
     .EXAMPLE
@@ -1888,8 +1873,8 @@ Function New-IpamNetworkHC {
             netmask  = 28
         }
 
-        Create a new network in IPAM for mac address '03:03:33:33:33:36'. When 
-        a machine is detected with this mac address on the network the fixed IP 
+        Create a new network in IPAM for mac address '03:03:33:33:33:36'. When
+        a machine is detected with this mac address on the network the fixed IP
         address '10.20.32.1'  will be assigned to it by the IPAM DHCP.
     #>
 
@@ -1944,5 +1929,3 @@ Function New-IpamNetworkHC {
     }
 }
 #endregion
-
-Skip-SelfSignedCertsHC
